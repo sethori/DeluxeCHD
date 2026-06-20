@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <circle cx="256" cy="256" r="230" fill="#2ecc71" />
+
+  <circle cx="256" cy="256" r="70" fill="#ffffff" opacity="0.2" />
+  <circle cx="256" cy="256" r="30" fill="#1e222a" />
+
+  <text x="440" y="450" 
+        font-family="Inter, Sans-Serif, Arial" 
+        font-size="155" 
+        font-weight="900" 
+        letter-spacing="-8"
+        fill="#ffffff" 
+        text-anchor="end">
+    DX
+  </text>
+</svg>
