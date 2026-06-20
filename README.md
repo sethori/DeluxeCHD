@@ -22,7 +22,7 @@ Automatic Installation
 Run this command in your terminal to automatically pull down the latest version and configure your system:
 
 ```bash
-curl -sSL [https://raw.githubusercontent.com/sethori/DeluxeCHD/main/install.sh](https://raw.githubusercontent.com/sethori/DeluxeCHD/main/install.sh) | bash
+curl -sSL https://raw.githubusercontent.com/sethori/DeluxeCHD/main/install.sh | bash
 ```
 
 Manual Installation
