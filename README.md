@@ -12,6 +12,7 @@ sudo apt install mame-tools unzip zip
 
 # Arch Linux
 sudo pacman -S mame-tools unzip zip
+```
 
 ## Installation
 
@@ -22,8 +23,10 @@ Run this command in your terminal to automatically pull down the latest version 
 
 ```bash
 curl -sSL [https://raw.githubusercontent.com/sethori/DeluxeCHD/main/install.sh](https://raw.githubusercontent.com/sethori/DeluxeCHD/main/install.sh) | bash
+```
 
 Manual Installation
+Run this if you git clone the repo without running the curl script above.
 
 ```bash
 # Make the script executable
@@ -31,3 +34,4 @@ chmod +x install.sh
 
 # Run the installer
 ./install.sh
+```
