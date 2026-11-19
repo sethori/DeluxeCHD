@@ -8,10 +8,10 @@ Ensure your host system has the underlying base compression utilities installed 
 
 ```bash
 # Ubuntu/Debian
-sudo apt install mame-tools unzip zip
+sudo apt install mame-tools unzip zip p7zip-full   # p7zip-full (7z) is needed for .7z/.rar; unrar is an optional .rar fallback
 
 # Arch Linux
-sudo pacman -S mame-tools unzip zip
+sudo pacman -S mame-tools unzip zip p7zip          # p7zip (7z) is needed for .7z/.rar; unrar is an optional .rar fallback
 ```
 
 ## Installation

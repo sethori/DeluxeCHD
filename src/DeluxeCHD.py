@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import re
 import sys
 import shutil
 import subprocess
@@ -35,6 +36,29 @@ class DeluxeCHDWorker(QThread):
         self.bytes_processed_so_far = 0
         self.current_item_size = 0
 
+    def cue_bin_files(self, cue_path):
+        """Returns the files a .cue sheet references (existing ones only), so we never touch unrelated files."""
+        parent = os.path.dirname(cue_path)
+        found = []
+        try:
+            with open(cue_path, 'r', encoding='utf-8', errors='replace') as fh:
+                for line in fh:
+                    m = re.match(r'\s*FILE\s+(?:"([^"]+)"|(\S+))', line, re.IGNORECASE)
+                    if m:
+                        candidate = os.path.join(parent, os.path.basename((m.group(1) or m.group(2)).replace('\\', '/')))
+                        if os.path.isfile(candidate):
+                            found.append(candidate)
+        except OSError:
+            pass
+        return found
+
+    def delete_loose_game(self, cue_path):
+        """Deletes a .cue and only the data files it references."""
+        for f in self.cue_bin_files(cue_path):
+            os.remove(f)
+        if os.path.exists(cue_path):
+            os.remove(cue_path)
+
     def get_associated_size(self, path, t_type):
         """Calculates precise item or file collection sizes for progress tracking."""
         if t_type == 'archive':
@@ -43,11 +67,7 @@ class DeluxeCHDWorker(QThread):
             return sum(os.path.getsize(os.path.join(r, f)) for r, _, files in os.walk(path) for f in files if os.path.exists(os.path.join(r, f)))
         if t_type == 'loose_cue':
             size = os.path.getsize(path)
-            base = os.path.splitext(os.path.basename(path))[0]
-            parent = os.path.dirname(path)
-            for f in os.listdir(parent):
-                if f.startswith(base) and f.lower().endswith('.bin'):
-                    size += os.path.getsize(os.path.join(parent, f))
+            size += sum(os.path.getsize(f) for f in self.cue_bin_files(path))
             return size
         return 0
 
@@ -92,6 +112,41 @@ class DeluxeCHDWorker(QThread):
             # Move up to the next parent directory
             current = os.path.dirname(current)
 
+    def convert_cue(self, cue_path, out_base, out_chd, out_zip, replace_path):
+        """Converts one .cue to CHD (optionally zipped). Returns (final_size, label, error); final_size is None on failure."""
+        work = os.path.dirname(cue_path)
+        tmp_chd = os.path.join(work, f"{out_base}.chd")
+        res = subprocess.run(["chdman", "createcd", "-i", cue_path, "-o", tmp_chd], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        if res.returncode != 0 or not os.path.exists(tmp_chd):
+            lines = (res.stderr or "").strip().splitlines()
+            if os.path.exists(tmp_chd):
+                os.remove(tmp_chd)
+            return None, "", "chdman engine failed" + (f" ({lines[-1]})" if lines else "")
+        # Never report success (or allow deletion of originals) unless the new CHD verifies
+        if subprocess.run(["chdman", "verify", "-i", tmp_chd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode != 0:
+            os.remove(tmp_chd)
+            return None, "", "CHD verification failed"
+        if not self.rezip_output:
+            shutil.move(tmp_chd, out_chd)
+            return os.path.getsize(out_chd), "Raw CHD File", ""
+        tmp_zip = os.path.join(work, f"{out_base}.chdtmp.zip")
+        zres = subprocess.run(["zip", "-q", "-j", tmp_zip, tmp_chd])
+        os.remove(tmp_chd)
+        if zres.returncode != 0 or not os.path.exists(tmp_zip):
+            if os.path.exists(tmp_zip):
+                os.remove(tmp_zip)
+            return None, "", "zip step failed"
+        # The new zip may share a name with the original archive it replaces
+        if self.delete_originals and replace_path and os.path.abspath(replace_path) == os.path.abspath(out_zip):
+            os.remove(replace_path)
+        shutil.move(tmp_zip, out_zip)
+        return os.path.getsize(out_zip), "Compressed Zip", ""
+
+    def cleanup_tmp(self, t_type, host_folder, base_name):
+        tmp_root = os.path.join(host_folder, f"tmp_{base_name}")
+        if t_type == 'archive' and os.path.exists(tmp_root):
+            shutil.rmtree(tmp_root)
+
     def run(self):
         archive_extensions = ('.zip', '.7z', '.rar')
         targets = []
@@ -113,8 +168,13 @@ class DeluxeCHDWorker(QThread):
                     for item in items:
                         full_path = os.path.join(self.folder_path, item)
                         if os.path.isdir(full_path) and not item.startswith('tmp_'):
-                            if any(f.lower().endswith('.cue') for f in os.listdir(full_path)):
+                            cue_names = sorted(f for f in os.listdir(full_path) if f.lower().endswith('.cue'))
+                            if len(cue_names) == 1:
                                 targets.append(('folder', full_path))
+                            else:
+                                # Multi-disc folder: each .cue is converted to its own CHD
+                                for cue_name in cue_names:
+                                    targets.append(('loose_cue', os.path.join(full_path, cue_name)))
                 elif self.mode == "all_in_one":
                     for item in items:
                         full_path = os.path.join(self.folder_path, item)
@@ -171,11 +231,7 @@ class DeluxeCHDWorker(QThread):
                             shutil.rmtree(path)
                             self.item_verified.emit(f"  └─ Automatically deleted original game subfolder: {display_name}")
                         elif t_type == 'loose_cue':
-                            if os.path.exists(path):
-                                os.remove(path)
-                            for f in os.listdir(host_folder):
-                                if f.startswith(base_name) and f.lower().endswith('.bin'):
-                                    os.remove(os.path.join(host_folder, f))
+                            self.delete_loose_game(path)
                             self.item_verified.emit(f"  └─ Automatically deleted original loose bin/cue: {base_name}")
                             
                             # Clean up deep path parent structural chain upward
@@ -188,88 +244,64 @@ class DeluxeCHDWorker(QThread):
                 self.progress_updated.emit(int(((index + 1) / total_items) * 100))
                 continue
 
+            tmp_root = os.path.join(host_folder, f"tmp_{base_name}")
+            cue_jobs = []  # (cue_path, output_base_name)
             if t_type == 'loose_cue':
-                target_cue = path
-                working_dir = host_folder
+                cue_jobs = [(path, base_name)]
             elif t_type == 'folder':
-                working_dir = path
-                sub_cues = [f for f in os.listdir(working_dir) if f.lower().endswith('.cue')]
-                target_cue = os.path.join(working_dir, sub_cues[0])
+                sub_cues = [f for f in os.listdir(path) if f.lower().endswith('.cue')]
+                cue_jobs = [(os.path.join(path, sub_cues[0]), base_name)]
             elif t_type == 'archive':
-                working_dir = os.path.join(host_folder, f"tmp_{base_name}")
-                os.makedirs(working_dir, exist_ok=True)
+                os.makedirs(tmp_root, exist_ok=True)
                 try:
-                    self.extract_archive(path, working_dir)
-                    
-                    found_cue = None
-                    for ext_root, _, ext_files in os.walk(working_dir):
-                        cues = [f for f in ext_files if f.lower().endswith('.cue')]
-                        if cues:
-                            found_cue = os.path.join(ext_root, cues[0])
-                            working_dir = ext_root
-                            break
-                            
-                    if not found_cue:
-                        self.item_verified.emit(f"• ⏭️ {display_name} → Skipped (No .cue sheet inside archive)")
-                        shutil.rmtree(os.path.join(host_folder, f"tmp_{base_name}"))
-                        self.bytes_processed_so_far += self.current_item_size
-                        self.progress_updated.emit(int(((index + 1) / total_items) * 100))
-                        continue
-                    
-                    target_cue = found_cue
+                    self.extract_archive(path, tmp_root)
+                    found = sorted(os.path.join(r, f) for r, _, fs in os.walk(tmp_root) for f in fs if f.lower().endswith('.cue'))
                 except Exception as e:
                     self.item_verified.emit(f"• ❌ {display_name} → Unpacking Failed ({e})")
-                    tmp_root = os.path.join(host_folder, f"tmp_{base_name}")
-                    if os.path.exists(tmp_root):
-                        shutil.rmtree(tmp_root)
+                    self.cleanup_tmp(t_type, host_folder, base_name)
                     self.bytes_processed_so_far += self.current_item_size
                     self.progress_updated.emit(int(((index + 1) / total_items) * 100))
                     continue
-
-            tmp_chd = os.path.join(working_dir, f"{base_name}.chd")
-
-            res = subprocess.run(["chdman", "createcd", "-i", target_cue, "-o", tmp_chd], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            
-            if res.returncode == 0 and os.path.exists(tmp_chd):
-                if self.rezip_output:
-                    subprocess.run(["zip", "-q", "-j", final_zip, tmp_chd])
-                    final_size = os.path.getsize(final_zip)
-                    label = "Compressed Zip"
-                    if os.path.exists(tmp_chd):
-                        os.remove(tmp_chd)
+                if not found:
+                    self.item_verified.emit(f"• ⏭️ {display_name} → Skipped (No .cue sheet inside archive)")
+                    self.cleanup_tmp(t_type, host_folder, base_name)
+                    self.bytes_processed_so_far += self.current_item_size
+                    self.progress_updated.emit(int(((index + 1) / total_items) * 100))
+                    continue
+                if len(found) == 1:
+                    cue_jobs = [(found[0], base_name)]
                 else:
-                    shutil.move(tmp_chd, expected_chd)
-                    final_size = os.path.getsize(expected_chd)
-                    label = "Raw CHD File"
+                    cue_jobs = [(c, os.path.splitext(os.path.basename(c))[0]) for c in found]
 
-                total_bytes_saved += (self.current_item_size - final_size)
-                pct = (1.0 - (final_size / self.current_item_size)) * 100 if self.current_item_size > 0 else 0.0
-                self.item_verified.emit(f"• [CHD] {base_name} → {label} (Shrunk by {max(0.0, pct):.1f}%)")
+            all_ok = True
+            share = self.current_item_size / len(cue_jobs)
+            for cue_path, out_base in cue_jobs:
+                out_chd = os.path.join(self.folder_path, f"{out_base}.chd")
+                out_zip = os.path.join(self.folder_path, f"{out_base}.zip" if self.delete_originals else f"{out_base}_CHD.zip")
+                if len(cue_jobs) > 1 and os.path.exists(out_zip if self.rezip_output else out_chd):
+                    self.item_verified.emit(f"• ⏭️ {out_base} → Already Exists (Skipped conversion)")
+                    continue
+                final_size, label, err = self.convert_cue(cue_path, out_base, out_chd, out_zip, path if t_type == 'archive' else None)
+                if final_size is None:
+                    all_ok = False
+                    self.item_verified.emit(f"• {out_base} → ERROR: {err} (originals kept).")
+                    continue
+                total_bytes_saved += (share - final_size)
+                pct = (1.0 - (final_size / share)) * 100 if share > 0 else 0.0
+                self.item_verified.emit(f"• [CHD] {out_base} → {label} (Shrunk by {max(0.0, pct):.1f}%)")
 
-                if self.delete_originals:
-                    if t_type == 'archive':
+            if all_ok and self.delete_originals:
+                if t_type == 'archive':
+                    if os.path.exists(path):
                         os.remove(path)
-                    elif t_type == 'folder':
-                        shutil.rmtree(path)
-                        # Check up the tree from where the subfolder was located
-                        if (self.mode == "recursive" or self.mode == "folders") and host_folder != self.folder_path:
-                            self.purge_empty_parent_tree(host_folder)
-                    elif t_type == 'loose_cue':
-                        if os.path.exists(path):
-                            os.remove(path)
-                        for f in os.listdir(host_folder):
-                            if f.startswith(base_name) and f.lower().endswith('.bin'):
-                                os.remove(os.path.join(host_folder, f))
-                        
-                        # Check up the tree from where the loose files were located
-                        if (self.mode == "recursive" or self.mode == "folders") and host_folder != self.folder_path:
-                            self.purge_empty_parent_tree(host_folder)
-            else:
-                self.item_verified.emit(f"• {display_name} → ERROR: chdman engine failed.")
+                elif t_type == 'folder':
+                    shutil.rmtree(path)
+                elif t_type == 'loose_cue':
+                    self.delete_loose_game(path)
+                if t_type != 'archive' and (self.mode == "recursive" or self.mode == "folders") and host_folder != self.folder_path:
+                    self.purge_empty_parent_tree(host_folder)
 
-            tmp_root = os.path.join(host_folder, f"tmp_{base_name}")
-            if t_type == 'archive' and os.path.exists(tmp_root):
-                shutil.rmtree(tmp_root)
+            self.cleanup_tmp(t_type, host_folder, base_name)
 
             self.bytes_processed_so_far += self.current_item_size
             self.progress_updated.emit(int(((index + 1) / total_items) * 100))

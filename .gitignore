@@ -1,1 +1,7 @@
-dist/DeluxeCHD_linux.tar.gz
+build/
+dist/
+__pycache__/
+*.pyc
+.directory
+venv/
+.venv/
