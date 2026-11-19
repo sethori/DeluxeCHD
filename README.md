@@ -72,4 +72,4 @@ packaging/linux/build_appimage.sh            # dist/DeluxeCHD-x86_64.AppImage
 ```
 
 The Windows installer is built with Inno Setup by GitHub Actions (`.github/workflows/build.yml`).
-Pushing a `vX.Y.Z` tag that matches `__version__` in `src/deluxechd/__init__.py` publishes a release.
+Every push to `main` publishes a release with the next version (1.0.1 → 1.0.2 … 1.0.9 → 1.1.0).

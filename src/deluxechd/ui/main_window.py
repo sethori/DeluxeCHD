@@ -96,7 +96,8 @@ class MainWindow(QMainWindow):
         theme.changed.connect(self.apply_tokens)
         self.apply_tokens(self.tokens)
 
-        if check_updates and self.settings.value("check_updates", True, type=bool):
+        # Source checkouts (version 0.0.0) don't check on startup; "Check for updates now" still works
+        if check_updates and tools.FROZEN and self.settings.value("check_updates", True, type=bool):
             QTimer.singleShot(1500, lambda: self.check_for_updates(manual=False))
 
     # ------------------------------------------------------------------ layout
@@ -206,7 +207,7 @@ class MainWindow(QMainWindow):
         footer = QFrame(objectName="SidebarFooter")
         fl = QHBoxLayout(footer)
         fl.setContentsMargins(10, 8, 2, 8)
-        self.version_lbl = QLabel(f"Version {__version__}", objectName="Version")
+        self.version_lbl = QLabel(f"Version {__version__}" if __version__ != "0.0.0" else "Development build", objectName="Version")
         fl.addWidget(self.version_lbl)
         fl.addStretch()
         self.settings_btn = QToolButton(objectName="IconButton")

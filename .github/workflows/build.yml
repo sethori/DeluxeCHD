@@ -1,19 +1,24 @@
 name: Build
 
 # Every push (any branch) and PR: run tests and build both packages (downloadable as workflow artifacts).
-# Pushing a tag like v2.0.0 also publishes a GitHub release with:
+# Every push to main also publishes the next version (1.0.1 → 1.0.2 … 1.0.9 → 1.1.0, see
+# packaging/version.py) as a GitHub release and tag with:
 #   DeluxeCHD-x86_64.AppImage, DeluxeCHD-Setup-x64.exe, SHA256SUMS
 # The in-app updater depends on those exact asset names.
 
 on:
   push:
     branches: ["**"]
-    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# One run at a time per branch, so two quick pushes to main can't claim the same version
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
   PYTHON_VERSION: "3.12"
@@ -37,15 +42,22 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
+      release: ${{ steps.v.outputs.release }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - id: v
         run: |
-          VERSION=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' src/deluxechd/__init__.py)
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          if [[ "$GITHUB_REF" == refs/tags/v* && "${GITHUB_REF_NAME#v}" != "$VERSION" ]]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match __version__ $VERSION"; exit 1
+          NEXT=$(python3 packaging/version.py next)
+          if [[ "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ]]; then
+            echo "version=$NEXT" >> "$GITHUB_OUTPUT"
+            echo "release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=$NEXT-dev.$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+            echo "release=false" >> "$GITHUB_OUTPUT"
           fi
+          echo "Version: $NEXT"
 
   appimage:
     needs: [test, version]
@@ -62,6 +74,7 @@ jobs:
           sudo apt-get install -y libegl1 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 \
             libxcb-shape0 libxcb-xinerama0 libxcb-randr0 libxcb-render-util0 libxcb-image0 libfuse2 file
       - run: pip install -r requirements-build.txt
+      - run: python packaging/version.py stamp ${{ needs.version.outputs.version }}
       - run: python packaging/make_icons.py
       - run: pyinstaller --noconfirm packaging/DeluxeCHD.spec
       - run: packaging/linux/build_appimage.sh
@@ -101,6 +114,7 @@ jobs:
           Copy-Item packaging\windows\THIRD-PARTY-NOTICES.txt build\tools\
           foreach ($f in "chdman.exe", "7z.exe", "7z.dll") { if (!(Test-Path "build\tools\$f")) { throw "missing $f" } }
           Get-ChildItem build\tools
+      - run: python packaging/version.py stamp ${{ needs.version.outputs.version }}
       - run: python packaging/make_icons.py
       - run: pyinstaller --noconfirm packaging/DeluxeCHD.spec
       - name: Smoke test (starts and exits offscreen)
@@ -116,7 +130,9 @@ jobs:
             choco install innosetup -y --no-progress
             $env:PATH += ";${env:ProgramFiles(x86)}\Inno Setup 6"
           }
-          iscc /DAppVersion=${{ needs.version.outputs.version }} packaging\windows\DeluxeCHD.iss
+          # Inno's file version must be numeric, so drop any -dev suffix
+          $v = "${{ needs.version.outputs.version }}".Split('-')[0]
+          iscc /DAppVersion=$v packaging\windows\DeluxeCHD.iss
       - uses: actions/upload-artifact@v4
         with:
           name: DeluxeCHD-Setup-x64.exe
@@ -124,32 +140,38 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: needs.version.outputs.release == 'true'
     needs: [version, appimage, windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
           path: out
           merge-multiple: true
       - name: Checksums and release notes
         run: |
-          cd out
-          sha256sum DeluxeCHD-x86_64.AppImage DeluxeCHD-Setup-x64.exe > SHA256SUMS
-          cat SHA256SUMS
-          cd ..
-          # Notes = this version's section of CHANGELOG.md (shown in the in-app update dialog)
-          awk -v v="${{ needs.version.outputs.version }}" '
-            $0 ~ "^## \\[" v "\\]" {on=1; next}
-            on && /^## \[/ {exit}
-            on {print}' CHANGELOG.md > notes.md
-          [ -s notes.md ] || echo "See CHANGELOG.md for details." > notes.md
+          (cd out && sha256sum DeluxeCHD-x86_64.AppImage DeluxeCHD-Setup-x64.exe > SHA256SUMS && cat SHA256SUMS)
+          # Notes = commit subjects since the previous release (shown in the in-app update dialog)
+          PREV=$(git tag --list 'v*' --sort=-version:refname | head -n1)
+          {
+            echo "### Changes"
+            if [ -n "$PREV" ]; then
+              git log --no-merges --pretty='- %s' "$PREV..$GITHUB_SHA"
+            else
+              git log --no-merges --pretty='- %s' -n 20 "$GITHUB_SHA"
+            fi
+          } > notes.md
+          cat notes.md
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --title "DeluxeCHD $GITHUB_REF_NAME" --notes-file notes.md \
+          gh release create "v$VERSION" --target "$GITHUB_SHA" --title "DeluxeCHD $VERSION" \
+            --notes-file notes.md --latest \
             out/DeluxeCHD-x86_64.AppImage out/DeluxeCHD-Setup-x64.exe out/SHA256SUMS

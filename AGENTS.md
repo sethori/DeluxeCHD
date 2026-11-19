@@ -24,7 +24,8 @@ python3 packaging/make_icons.py && pyinstaller packaging/DeluxeCHD.spec   # dist
 packaging/linux/build_appimage.sh                      # dist/DeluxeCHD-x86_64.AppImage
 ```
 
-- CI (`.github/workflows/build.yml`) tests, builds the AppImage (ubuntu-22.04) and the Windows installer (Inno Setup, `packaging/windows/DeluxeCHD.iss`, bundles `chdman.exe` from a pinned, checksummed MAME release plus 7-Zip). A `vX.Y.Z` tag must equal `__version__` in `src/deluxechd/__init__.py`; it publishes a release whose notes are that version's `CHANGELOG.md` section.
+- CI (`.github/workflows/build.yml`) tests and builds the AppImage (ubuntu-22.04) and the Windows installer (Inno Setup, `packaging/windows/DeluxeCHD.iss`, bundles `chdman.exe` from a pinned, checksummed MAME release plus 7-Zip) on every push.
+- **Every push to `main` is a release.** CI picks the next version from the git tags (`packaging/version.py`: each part counts 0-9 and rolls over, 1.0.9 → 1.1.0 → … 1.9.9 → 2.0.0), stamps it into the build, and publishes tag `vX.Y.Z` with the commit subjects as notes. Don't create version tags by hand, and don't edit `__version__` (it stays `0.0.0` in source). Write commit subjects users can read, since they appear in the in-app update dialog.
 - **The updater and `install.sh` depend on the exact asset names** `DeluxeCHD-x86_64.AppImage`, `DeluxeCHD-Setup-x64.exe` and `SHA256SUMS`. Don't rename them.
 - The spec file prunes host system libraries (glib, GTK, X11, libstdc++ and others) from the Linux bundle on purpose. Keep that list when changing it.
 - `build/` and `dist/` are gitignored. Never commit build output.
@@ -44,7 +45,7 @@ packaging/linux/build_appimage.sh                      # dist/DeluxeCHD-x86_64.A
 ## Milestones
 
 - **v1.0** (2026-06-19): first public release. PyQt6 GUI, four scan modes, install script.
-- **v2.0.0** (2026-11-19): rewrite on PySide6. Windows installer + AppImage built in GitHub Actions, self-updater, system/KDE Material You theming, new UI, test suite. Also carries the earlier unreleased fixes (re-zip crash, safer deletion, multi-disc). The old PyQt6 app lives on the `legacy-v1` branch.
+- **v1.0.1** (2026-11-19): rewrite on PySide6. Windows installer + AppImage built in GitHub Actions, self-updater, system/KDE Material You theming, new UI, test suite, new CD-with-diamond icon, automatic versioning. (A 2.0.0 release of the rewrite was published and withdrawn the same day.) Also carries the earlier unreleased fixes (re-zip crash, safer deletion, multi-disc). The old PyQt6 app lives on the `legacy-v1` branch.
 
 ## Known open issues
 
@@ -57,6 +58,6 @@ packaging/linux/build_appimage.sh                      # dist/DeluxeCHD-x86_64.A
 - **Communication:** concise, plain answers. Explain trade-offs only when they matter.
 - **Git:** commit freely on feature branches with clear messages. **Ask before pushing**, opening PRs, or touching `main`.
 - **Upkeep (required on every change):**
-  - Add a line under `[Unreleased]` in `CHANGELOG.md` for any user-visible change or fix (Keep a Changelog format, SemVer).
+  - Add a line to `CHANGELOG.md` for any user-visible change or fix, under a heading for today's date (create it if needed).
   - Update the **Milestones** and **Known open issues** sections above when they change.
   - Keep this file short. It is loaded into every agent's context, so put detail in the changelog, not here.

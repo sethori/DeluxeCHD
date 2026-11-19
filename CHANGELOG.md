@@ -1,13 +1,19 @@
 # Changelog
 
 All notable changes to DeluxeCHD are documented here.
-Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: [SemVer](https://semver.org/).
+Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+Every push to `main` is released automatically with the next version number (1.0.1, 1.0.2 … 1.0.9, 1.1.0;
+see `packaging/version.py`). Each release on GitHub lists its commits. This file groups the notable
+changes by date, with the first version that included them.
 
-## [2.0.0] - 2026-11-19
+## 2026-11-19 (from 1.0.1)
+
+The rewrite. A short-lived 2.0.0 release of it was withdrawn when the version scheme changed.
 
 ### Added
+- New app icon: a CD with a diamond badge.
+- Automatic versioning: every push to `main` publishes the next version.
 - Windows support, with an installer that bundles `chdman` and 7-Zip.
 - Linux AppImage. `install.sh` now installs the AppImage (and verifies its checksum).
 - GitHub Actions workflow that tests, builds the AppImage and Windows installer, and publishes tagged releases.
@@ -49,6 +55,4 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 - Live elapsed/ETA display, progress bar, and space-saved summary.
 - `install.sh` one-line installer (binary, icon, desktop entry).
 
-[Unreleased]: https://github.com/sethori/DeluxeCHD/compare/v2.0.0...HEAD
-[2.0.0]: https://github.com/sethori/DeluxeCHD/compare/v1.0...v2.0.0
 [1.0.0]: https://github.com/sethori/DeluxeCHD/releases/tag/v1.0

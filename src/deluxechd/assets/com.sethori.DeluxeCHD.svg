@@ -1,16 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
-  <circle cx="256" cy="256" r="230" fill="#2ecc71" />
-
-  <circle cx="256" cy="256" r="70" fill="#ffffff" opacity="0.2" />
-  <circle cx="256" cy="256" r="30" fill="#1e222a" />
-
-  <text x="440" y="450" 
-        font-family="Inter, Sans-Serif, Arial" 
-        font-size="155" 
-        font-weight="900" 
-        letter-spacing="-8"
-        fill="#ffffff" 
-        text-anchor="end">
-    DX
-  </text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" gradientUnits="userSpaceOnUse" x1="32" y1="32" x2="480" y2="480">
+      <stop offset="0" stop-color="#1e293b"/><stop offset="1" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="disc" gradientUnits="userSpaceOnUse" x1="108" y1="108" x2="364" y2="364">
+      <stop offset="0" stop-color="#2dd4bf"/><stop offset=".5" stop-color="#38bdf8"/><stop offset="1" stop-color="#a78bfa"/>
+    </linearGradient>
+  </defs>
+  <rect x="34" y="34" width="444" height="444" rx="110" fill="url(#bg)" stroke="#94a3b8" stroke-opacity=".28" stroke-width="4"/>
+  <circle cx="236" cy="236" r="128" fill="url(#disc)"/>
+  <path d="M236 137.4 A98.6 98.6 0 0 1 334.6 236" fill="none" stroke="#ffffff" stroke-width="13" stroke-linecap="round" opacity=".45"/>
+  <circle cx="236" cy="236" r="41.0" fill="#ffffff" opacity=".35"/>
+  <circle cx="236" cy="236" r="16.6" fill="#0f172a"/>
+  <polygon points="284.0,352.0 317.3,311.3 398.7,311.3 432.0,352.0 358.0,437.1" fill="#0f172a" stroke="#0f172a" stroke-width="26.6" stroke-linejoin="round"/>
+  <polygon points="284.0,352.0 317.3,311.3 332.1,352.0" fill="#bae6fd" stroke="#bae6fd" stroke-width="1" stroke-linejoin="round"/>
+  <polygon points="317.3,311.3 398.7,311.3 383.9,352.0 332.1,352.0" fill="#f8fafc" stroke="#f8fafc" stroke-width="1" stroke-linejoin="round"/>
+  <polygon points="398.7,311.3 432.0,352.0 383.9,352.0" fill="#7dd3fc" stroke="#7dd3fc" stroke-width="1" stroke-linejoin="round"/>
+  <polygon points="284.0,352.0 332.1,352.0 358.0,437.1" fill="#7dd3fc" stroke="#7dd3fc" stroke-width="1" stroke-linejoin="round"/>
+  <polygon points="332.1,352.0 383.9,352.0 358.0,437.1" fill="#e0f2fe" stroke="#e0f2fe" stroke-width="1" stroke-linejoin="round"/>
+  <polygon points="383.9,352.0 432.0,352.0 358.0,437.1" fill="#38bdf8" stroke="#38bdf8" stroke-width="1" stroke-linejoin="round"/>
+  <path d="M150.0 374.0 Q152.2 389.8 168.0 392.0 Q152.2 394.2 150.0 410.0 Q147.8 394.2 132.0 392.0 Q147.8 389.8 150.0 374.0Z" fill="#ffffff" opacity="0.85"/>
 </svg>
