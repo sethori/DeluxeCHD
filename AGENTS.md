@@ -4,47 +4,53 @@ Shared context for any AI coding agent (Claude, Codex, Antigravity, and others) 
 
 ## What this project is
 
-**DeluxeCHD** is a Linux desktop GUI app (Python 3 + PyQt6) that batch-converts PS1 disc images (`.cue`/`.bin`, loose, in per-game folders, or inside `.zip`/`.7z`/`.rar` archives) into compressed **CHD** files using MAME's `chdman`. It can optionally re-zip the output and delete the originals. Its users are people shrinking emulator ROM libraries.
+**DeluxeCHD** is a desktop GUI app (Python 3 + PySide6) for Linux and Windows that batch-converts CD images (`.cue`/`.bin`, loose, in per-game folders, or inside `.zip`/`.7z`/`.rar` archives) into compressed **CHD** files using MAME's `chdman`. It can optionally re-zip the output and delete the originals. Its users are people shrinking emulator ROM libraries.
 
-- Single source file: `src/DeluxeCHD.py`
-  - `DeluxeCHDWorker` (`QThread`): finds targets, extracts, converts, cleans up
-  - `MainWindow`: the UI
-- Icon: `src/com.sethori.DeluxeCHD.svg` (bundled into the binary via `DeluxeCHD.spec`)
-- `install.sh`: downloads `DeluxeCHD_linux.tar.gz` from the latest GitHub release into `~/.local/bin`, installs the icon, and writes a `.desktop` entry
-- Runtime dependencies are external CLIs: `chdman` (mame-tools), `unzip`, `zip`, `7z` (p7zip), and optionally `unrar`
+Layout (`src/deluxechd/`):
+- `converter.py`: the engine (`Converter`). Pure Python, no Qt. All scanning, conversion and deletion logic lives here.
+- `tools.py`: finds `chdman`/`7z`/`unrar` (bundled `tools/` folder first, then PATH) and runs them (no console window on Windows, clean `LD_LIBRARY_PATH` in frozen Linux builds).
+- `theme.py`: system colours. Reads `~/.config/kdeglobals` on Linux (KDE and Material You schemes, watched live), otherwise Qt's platform palette. Builds the stylesheet from a few tokens.
+- `updater.py`: GitHub release check and self-update (AppImage swap in place, or silent Inno Setup run). Refuses any download without a matching SHA-256.
+- `ui/`: `main_window.py` (sidebar + hero + log), `update_dialog.py`, `widgets.py`, `icons.py` (inline SVG icons).
+- `run.py` is the entry point for source runs and PyInstaller.
 
 ## Build and release
 
 ```bash
-pip install pyqt6 pyinstaller
-python3 src/DeluxeCHD.py            # run from source
-pyinstaller DeluxeCHD.spec          # builds dist/DeluxeCHD (single binary)
-tar -czf DeluxeCHD_linux.tar.gz -C dist DeluxeCHD   # attach to a GitHub release
+pip install -r requirements.txt && python3 run.py      # run from source
+python3 -m unittest discover -s tests                  # engine + updater tests
+pip install -r requirements-build.txt
+python3 packaging/make_icons.py && pyinstaller packaging/DeluxeCHD.spec   # dist/DeluxeCHD/
+packaging/linux/build_appimage.sh                      # dist/DeluxeCHD-x86_64.AppImage
 ```
 
-`build/` and `dist/` are gitignored. Never commit build output. `install.sh` depends on the release asset being named exactly `DeluxeCHD_linux.tar.gz`.
+- CI (`.github/workflows/build.yml`) tests, builds the AppImage (ubuntu-22.04) and the Windows installer (Inno Setup, `packaging/windows/DeluxeCHD.iss`, bundles `chdman.exe` from a pinned, checksummed MAME release plus 7-Zip). A `vX.Y.Z` tag must equal `__version__` in `src/deluxechd/__init__.py`; it publishes a release whose notes are that version's `CHANGELOG.md` section.
+- **The updater and `install.sh` depend on the exact asset names** `DeluxeCHD-x86_64.AppImage`, `DeluxeCHD-Setup-x64.exe` and `SHA256SUMS`. Don't rename them.
+- The spec file prunes host system libraries (glib, GTK, X11, libstdc++ and others) from the Linux bundle on purpose. Keep that list when changing it.
+- `build/` and `dist/` are gitignored. Never commit build output.
 
 ## Things every agent must know
 
-- **The app deletes users' files.** Treat any change to deletion or cleanup logic as high risk. Current safety rules, which you must keep:
+- **The app deletes users' files.** Treat any change to deletion or cleanup logic as high risk. Current safety rules, which you must keep (and which `tests/test_converter.py` covers):
   - Originals are deleted only after `chdman verify` passes on the new CHD, and (for multi-disc items) only after **every** disc succeeds.
   - Loose-game deletion removes only the `.bin` files referenced by the `.cue`'s `FILE` lines. Never match by filename prefix.
+  - Never delete a file the run just produced (a re-zipped `Game.zip` can replace its own source archive).
   - Parent-folder cleanup (`purge_empty_parent_tree`) never goes above the folder the user selected, and only removes folders that are empty or hold only `.txt/.nfo/.url/.ini/.db` files.
 - Multi-disc games: each `.cue` becomes its own `.chd`, both in per-game folders and inside archives.
 - Archives are extracted into a `tmp_<name>` folder next to the archive. Scans skip `tmp_*` folders.
-- There is no automated test suite yet. To test without `chdman`, stub it on `PATH` and stub the PyQt6 imports, then call `DeluxeCHDWorker.run()` directly. Say clearly what was and wasn't tested for real.
-- Target platform is Linux only (`xdg-open`, `.desktop` files, `~/.local`).
+- `$APPIMAGE` is inherited by child processes. Only trust it when our executable is inside `$APPDIR` (see `updater.running_appimage`), or the updater could overwrite another app.
+- Tests use a stub `chdman` on PATH. Real `chdman` runs and the Windows build can only be checked in CI or by hand. Say clearly what was and wasn't tested for real.
 
 ## Milestones
 
 - **v1.0** (2026-06-19): first public release. PyQt6 GUI, four scan modes, install script.
-- **Unreleased** (2026-11-19): fixed the re-zip crash, made deletion safer (verify before delete, cue-referenced files only), added multi-disc support, untracked build artifacts.
+- **v2.0.0, unreleased** (2026-11-19): rewrite on PySide6. Windows installer + AppImage built in GitHub Actions, self-updater, system/KDE Material You theming, new UI, test suite. Also carries the earlier unreleased fixes (re-zip crash, safer deletion, multi-disc).
 
 ## Known open issues
 
 - The progress bar advances per item, not per byte (the ETA is byte-based).
-- The re-zip path and real `chdman` runs haven't been verified on this branch since the 2026-11-19 changes.
-- The README describes the app as PS1-only, but it works for any CD image with a `.cue` sheet.
+- Not yet verified for real: a full CI run, the Windows installer and its silent self-update, and conversions with a real `chdman` (only a stub has been used).
+- There is no cancel button; quitting mid-run can leave a partial `.chd` or a `tmp_` folder (originals are safe).
 
 ## How to work here (owner preferences)
 

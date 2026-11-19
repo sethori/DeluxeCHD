@@ -5,3 +5,4 @@ __pycache__/
 .directory
 venv/
 .venv/
+*.egg-info/

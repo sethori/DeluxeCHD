@@ -1,0 +1,10 @@
+DeluxeCHD for Windows bundles these third-party programs, unmodified:
+
+chdman.exe
+  Part of MAME (https://www.mamedev.org/), licensed under the GNU GPL v2 or later.
+  Source code: https://github.com/mamedev/mame
+
+7z.exe, 7z.dll
+  7-Zip by Igor Pavlov (https://www.7-zip.org/), licensed under the GNU LGPL with the
+  unRAR license restriction. See 7-Zip-License.txt in this folder.
+  Source code: https://github.com/ip7z/7zip

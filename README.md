@@ -1,37 +1,62 @@
 # DeluxeCHD
 
-A clean, native utility designed to batch extract zipped PS1 games, convert them to highly optimized CHD format using `chdman`, and optionally repackage or clean up original files.
+Batch-convert CD images to compressed **CHD** files with MAME's `chdman`. Point it at a folder of
+`.cue`/`.bin` games (loose, one folder per game, or inside `.zip`/`.7z`/`.rar` archives) and it
+converts everything, optionally re-zips the output, and can delete the originals once each new CHD
+has been verified. Built for PS1 libraries, but it works with any CD image that has a `.cue` sheet.
 
-## Prerequisites
+- Follows your system theme: light/dark and accent colour on Windows, and your KDE Plasma colour
+  scheme on Linux (including Material You schemes), updated live.
+- Checks GitHub for a new version on startup and can download and install it for you
+  (AppImage and Windows installer builds).
 
-Ensure your host system has the underlying base compression utilities installed locally:
+## Download
+
+Get the latest build from [Releases](https://github.com/sethori/DeluxeCHD/releases/latest):
+
+| Platform | File |
+| --- | --- |
+| Windows 10/11 (x64) | `DeluxeCHD-Setup-x64.exe`. Bundles `chdman` and 7-Zip. No extra installs needed. |
+| Linux (x86_64) | `DeluxeCHD-x86_64.AppImage` |
+
+### Linux
+
+The AppImage uses the `chdman` and `7z` already on your system:
 
 ```bash
-# Ubuntu/Debian
-sudo apt install mame-tools unzip zip p7zip-full   # p7zip-full (7z) is needed for .7z/.rar; unrar is an optional .rar fallback
-
-# Arch Linux
-sudo pacman -S mame-tools unzip zip p7zip          # p7zip (7z) is needed for .7z/.rar; unrar is an optional .rar fallback
+# Arch
+sudo pacman -S mame-tools p7zip          # unrar is an optional fallback for .rar
+# Debian/Ubuntu
+sudo apt install mame-tools p7zip-full
 ```
 
-## Installation
-
-You can install DeluxeCHD using our automated installer script. The script automatically handles downloading the pre-compiled binary, placing it in your users path, and creating a native Linux application menu shortcut with the correct branding icon.
-
-Automatic Installation
-Run this command in your terminal to automatically pull down the latest version and configure your system:
+One-line install (puts the AppImage in `~/.local/bin` and adds a menu entry):
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/sethori/DeluxeCHD/main/install.sh | bash
 ```
 
-Manual Installation
-Run this if you git clone the repo without running the curl script above.
+Or download the AppImage, `chmod +x` it, and run it.
+
+## Safety
+
+DeluxeCHD only deletes originals when you turn on **Delete originals**, and then only after
+`chdman verify` passes on the new CHD (for multi-disc games, after every disc passes). Loose games
+lose only the files their `.cue` references. Empty leftover folders are cleaned up, but never above
+the folder you picked.
+
+## Building from source
 
 ```bash
-# Make the script executable
-chmod +x install.sh
+pip install -r requirements.txt
+python3 run.py                               # run from source
+python3 -m unittest discover -s tests        # engine tests (stub chdman, no Qt needed)
 
-# Run the installer
-./install.sh
+pip install -r requirements-build.txt
+python3 packaging/make_icons.py
+pyinstaller packaging/DeluxeCHD.spec         # dist/DeluxeCHD/
+packaging/linux/build_appimage.sh            # dist/DeluxeCHD-x86_64.AppImage
 ```
+
+The Windows installer is built with Inno Setup by GitHub Actions (`.github/workflows/build.yml`).
+Pushing a `vX.Y.Z` tag that matches `__version__` in `src/deluxechd/__init__.py` publishes a release.

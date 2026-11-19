@@ -1,0 +1,155 @@
+name: Build
+
+# Every push/PR: run tests and build both packages (downloadable as workflow artifacts).
+# Pushing a tag like v2.0.0 also publishes a GitHub release with:
+#   DeluxeCHD-x86_64.AppImage, DeluxeCHD-Setup-x64.exe, SHA256SUMS
+# The in-app updater depends on those exact asset names.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  MAME_VERSION: "0289"
+  MAME_SHA256: "a1aa7912168c9d1b05e611906bc21b8b9be3935822aead36d12a1da363150b7d"
+  SEVENZIP_VERSION: "26.06"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: sudo apt-get update && sudo apt-get install -y p7zip-full
+      - run: pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -v
+
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        run: |
+          VERSION=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' src/deluxechd/__init__.py)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" == refs/tags/v* && "${GITHUB_REF_NAME#v}" != "$VERSION" ]]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match __version__ $VERSION"; exit 1
+          fi
+
+  appimage:
+    needs: [test, version]
+    # Oldest supported runner, so the AppImage runs on older glibc versions too
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: System libraries Qt needs at build time
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 \
+            libxcb-shape0 libxcb-xinerama0 libxcb-randr0 libxcb-render-util0 libxcb-image0 libfuse2 file
+      - run: pip install -r requirements-build.txt
+      - run: python packaging/make_icons.py
+      - run: pyinstaller --noconfirm packaging/DeluxeCHD.spec
+      - run: packaging/linux/build_appimage.sh
+      - name: Smoke test (starts and exits offscreen)
+        run: |
+          QT_QPA_PLATFORM=offscreen timeout 20 dist/DeluxeCHD/DeluxeCHD --smoke-test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DeluxeCHD-x86_64.AppImage
+          path: dist/DeluxeCHD-x86_64.AppImage
+          if-no-files-found: error
+
+  windows:
+    needs: [test, version]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install -r requirements-build.txt
+      - name: Fetch chdman and 7-Zip
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force build\tools, build\dl | Out-Null
+          $mame = "mame${env:MAME_VERSION}b_x64.exe"
+          Invoke-WebRequest "https://github.com/mamedev/mame/releases/download/mame${env:MAME_VERSION}/$mame" -OutFile "build\dl\$mame"
+          $hash = (Get-FileHash "build\dl\$mame" -Algorithm SHA256).Hash.ToLower()
+          if ($hash -ne $env:MAME_SHA256) { throw "MAME download checksum mismatch: $hash" }
+          7z e "build\dl\$mame" chdman.exe -obuild\tools -y | Out-Null
+          $sz = "7z" + ($env:SEVENZIP_VERSION -replace '\.', '') + "-x64.exe"
+          Invoke-WebRequest "https://github.com/ip7z/7zip/releases/download/${env:SEVENZIP_VERSION}/$sz" -OutFile "build\dl\$sz"
+          7z x "build\dl\$sz" -obuild\dl\7zip -y | Out-Null
+          Copy-Item build\dl\7zip\7z.exe, build\dl\7zip\7z.dll build\tools\
+          Copy-Item build\dl\7zip\License.txt build\tools\7-Zip-License.txt
+          Copy-Item packaging\windows\THIRD-PARTY-NOTICES.txt build\tools\
+          foreach ($f in "chdman.exe", "7z.exe", "7z.dll") { if (!(Test-Path "build\tools\$f")) { throw "missing $f" } }
+          Get-ChildItem build\tools
+      - run: python packaging/make_icons.py
+      - run: pyinstaller --noconfirm packaging/DeluxeCHD.spec
+      - name: Smoke test (starts and exits offscreen)
+        shell: pwsh
+        run: |
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $p = Start-Process dist\DeluxeCHD\DeluxeCHD.exe -ArgumentList "--smoke-test" -PassThru -Wait
+          if ($p.ExitCode -ne 0) { throw "smoke test exit code $($p.ExitCode)" }
+      - name: Build installer
+        shell: pwsh
+        run: |
+          if (-not (Get-Command iscc -ErrorAction SilentlyContinue)) {
+            choco install innosetup -y --no-progress
+            $env:PATH += ";${env:ProgramFiles(x86)}\Inno Setup 6"
+          }
+          iscc /DAppVersion=${{ needs.version.outputs.version }} packaging\windows\DeluxeCHD.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DeluxeCHD-Setup-x64.exe
+          path: dist/DeluxeCHD-Setup-x64.exe
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [version, appimage, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - name: Checksums and release notes
+        run: |
+          cd out
+          sha256sum DeluxeCHD-x86_64.AppImage DeluxeCHD-Setup-x64.exe > SHA256SUMS
+          cat SHA256SUMS
+          cd ..
+          # Notes = this version's section of CHANGELOG.md (shown in the in-app update dialog)
+          awk -v v="${{ needs.version.outputs.version }}" '
+            $0 ~ "^## \\[" v "\\]" {on=1; next}
+            on && /^## \[/ {exit}
+            on {print}' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "See CHANGELOG.md for details." > notes.md
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --title "DeluxeCHD $GITHUB_REF_NAME" --notes-file notes.md \
+            out/DeluxeCHD-x86_64.AppImage out/DeluxeCHD-Setup-x64.exe out/SHA256SUMS

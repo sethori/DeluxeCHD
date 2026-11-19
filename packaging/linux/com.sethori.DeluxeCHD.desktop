@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=DeluxeCHD
+Comment=Batch convert CD images (.cue/.bin, .zip, .7z, .rar) to CHD
+Exec=DeluxeCHD
+Icon=com.sethori.DeluxeCHD
+Terminal=false
+Categories=Utility;Archiving;
+StartupWMClass=DeluxeCHD
+X-AppImage-Name=DeluxeCHD
