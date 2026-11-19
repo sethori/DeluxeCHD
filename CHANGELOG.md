@@ -5,7 +5,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) · Versioning: 
 
 ## [Unreleased]
 
-Planned as 2.0.0.
+## [2.0.0] - 2026-11-19
 
 ### Added
 - Windows support, with an installer that bundles `chdman` and 7-Zip.
@@ -49,5 +49,6 @@ Planned as 2.0.0.
 - Live elapsed/ETA display, progress bar, and space-saved summary.
 - `install.sh` one-line installer (binary, icon, desktop entry).
 
-[Unreleased]: https://github.com/sethori/DeluxeCHD/compare/v1.0...HEAD
+[Unreleased]: https://github.com/sethori/DeluxeCHD/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/sethori/DeluxeCHD/compare/v1.0...v2.0.0
 [1.0.0]: https://github.com/sethori/DeluxeCHD/releases/tag/v1.0

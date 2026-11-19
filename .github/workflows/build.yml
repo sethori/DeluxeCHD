@@ -1,13 +1,13 @@
 name: Build
 
-# Every push/PR: run tests and build both packages (downloadable as workflow artifacts).
+# Every push (any branch) and PR: run tests and build both packages (downloadable as workflow artifacts).
 # Pushing a tag like v2.0.0 also publishes a GitHub release with:
 #   DeluxeCHD-x86_64.AppImage, DeluxeCHD-Setup-x64.exe, SHA256SUMS
 # The in-app updater depends on those exact asset names.
 
 on:
   push:
-    branches: [main]
+    branches: ["**"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:

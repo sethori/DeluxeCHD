@@ -44,7 +44,7 @@ packaging/linux/build_appimage.sh                      # dist/DeluxeCHD-x86_64.A
 ## Milestones
 
 - **v1.0** (2026-06-19): first public release. PyQt6 GUI, four scan modes, install script.
-- **v2.0.0, unreleased** (2026-11-19): rewrite on PySide6. Windows installer + AppImage built in GitHub Actions, self-updater, system/KDE Material You theming, new UI, test suite. Also carries the earlier unreleased fixes (re-zip crash, safer deletion, multi-disc).
+- **v2.0.0** (2026-11-19): rewrite on PySide6. Windows installer + AppImage built in GitHub Actions, self-updater, system/KDE Material You theming, new UI, test suite. Also carries the earlier unreleased fixes (re-zip crash, safer deletion, multi-disc). The old PyQt6 app lives on the `legacy-v1` branch.
 
 ## Known open issues
 
